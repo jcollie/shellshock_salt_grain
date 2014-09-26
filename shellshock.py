@@ -14,23 +14,64 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import shutil
 import subprocess
+import tempfile
 
 def grains():
+    result = {}
+
+    # test for CVE-2014-6271
+
     bash = subprocess.Popen(['bash', '-c', 'echo this is a test'],
-                            env={'x': '() { :;}; echo vulnerable'},
+                            env = {'x': '() { :;}; echo vulnerable'},
                             stdin = None,
                             stdout = subprocess.PIPE,
                             stderr = subprocess.PIPE)
     bash.wait()
 
-    result = {'shellshock_stdout': bash.stdout.read(),
-              'shellshock_stderr': bash.stderr.read()}
+    result['shellshock1_stdout'] = bash.stdout.read()
+    result['shellshock1_stderr'] = bash.stderr.read()
     
-    if result['shellshock_stdout'].find('vulnerable') >= 0:
+    if result['shellshock1_stdout'].find('vulnerable') >= 0:
+        result['shellshock1'] = 'vulnerable'
+
+    else:
+        result['shellshock1'] = 'not vulnerable'
+
+    # test for CVE-2014-7169
+
+    tmpdir = tempfile.mkdtemp()
+
+    result['shellshock2_tmpdir'] = tmpdir
+
+    bash = subprocess.Popen(['bash', '-c', 'echo date'],
+                            env = {'x': '() { (a)=>\\'},
+                            cwd = tmpdir,
+                            stdin = None,
+                            stdout = subprocess.PIPE,
+                            stderr = subprocess.PIPE)
+    bash.wait()
+
+    result['shellshock2_stdout'] = bash.stdout.read()
+    result['shellshock2_stderr'] = bash.stderr.read()
+
+    if os.path.exists(os.path.join(tmpdir, 'echo')):
+        result['shellshock2'] = 'vulnerable'
+
+    else:
+        result['shellshock2'] = 'not vulnerable'
+
+    shutil.rmtree(tmpdir)
+
+    if result['shellshock1'] == 'vulnerable' or result['shellshock2'] == 'vulnerable':
         result['shellshock'] = 'vulnerable'
 
     else:
         result['shellshock'] = 'not vulnerable'
 
     return result
+
+if __name__ == '__main__':
+    print grains()
